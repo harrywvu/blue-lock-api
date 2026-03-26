@@ -1,0 +1,18 @@
+{
+    "id" : 1,
+    "name" : "Isagi Yoichi",
+    "age": 17,
+    "height" : 175,
+    "nel_team" : "Bastard Munchen",
+    "primary_position" : "Center Forward",
+    "current_blue_lock_rank" : 1,
+    "stats" : {
+        "overall" : 94,
+        "offense" : 97.5,
+        "shooting" : 90,
+        "speed" : 83,
+        "defense" : 80,
+        "passing" : 83,
+        "dribbling" : 77.5
+    }
+}
