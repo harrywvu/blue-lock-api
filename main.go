@@ -1,14 +1,18 @@
 package main
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
-	_	"github.com/mattn/go-sqlite3"
-
+	_ "github.com/mattn/go-sqlite3"
 )
+
+type application struct {
+	db *sql.DB
+}
 
 type Stats struct {
 	Overall   float64 `json:"overall"`
@@ -33,9 +37,14 @@ type player struct {
 
 
 func main() {
+
+	db := openDB()
+	defer db.Close()
+	app := application{db: db}
+
 	router := gin.Default()
-	router.GET("/players", getPlayers)
-	router.GET("/players/:id", getPlayerById)
+	router.GET("/players", app.getPlayers)
+	router.GET("/players/:id", app.getPlayerById)
 
 	router.Run("localhost:8080")
 }
@@ -94,7 +103,8 @@ var players = []player {
 	},
 }
 
-func getPlayers(c *gin.Context){
+
+func (a *application) getPlayers(c *gin.Context){
 
 	name := c.Query("name")
 
@@ -112,7 +122,7 @@ func getPlayers(c *gin.Context){
 	c.IndentedJSON(http.StatusOK, players)
 }
 
-func getPlayerById(c *gin.Context){
+func (a *application) getPlayerById (c *gin.Context){
 	idStr := c.Param("id")
 
 	// if the conversion fails, it returns an error.
