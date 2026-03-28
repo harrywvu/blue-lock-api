@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -50,58 +52,58 @@ func main() {
 }
 
 
-var players = []player {
-	{
-		ID: 1, 
-		Name: "Isagi Yoichi", 
-		Age: 17, 
-		Height: 175, 
-		NELTeam: "Bastard Munchen", 
-		PrimaryPosition: "Center Forward", 
-		CurrentBlueLockRank: 1,
-		Stats: Stats{Overall: 94, Offense: 97.5, Shooting: 90, Speed: 83, Defense: 80, Passing: 83, Dribbling: 77.5},
-	},
-	{
-		ID: 2, 
-		Name: "Itoshi Rin", 
-		Age: 18, 
-		Height: 186, 
-		NELTeam: "Paris X Gen", 
-		PrimaryPosition: "Left Winger", 
-		CurrentBlueLockRank: 2,
-		Stats: Stats{Overall: 95, Offense: 96, Shooting: 94, Speed: 88, Defense: 82, Passing: 85, Dribbling: 90},
-	},
-	{
-		ID: 3, 
-		Name: "Nagi Seishiro", 
-		Age: 17, 
-		Height: 190, 
-		NELTeam: "Manshine City", 
-		PrimaryPosition: "Center Forward", 
-		CurrentBlueLockRank: 3,
-		Stats: Stats{Overall: 93, Offense: 98, Shooting: 92, Speed: 80, Defense: 75, Passing: 88, Dribbling: 95},
-	},
-	{
-		ID: 4, 
-		Name: "Michael Kaiser", 
-		Age: 20, 
-		Height: 186, 
-		NELTeam: "Bastard Munchen", 
-		PrimaryPosition: "False Nine", 
-		CurrentBlueLockRank: 4,
-		Stats: Stats{Overall: 96, Offense: 99, Shooting: 95, Speed: 85, Defense: 78, Passing: 90, Dribbling: 97},
-	},
-	{
-		ID: 5, 
-		Name: "Julian Loki", 
-		Age: 19, 
-		Height: 181, 
-		NELTeam: "Paris X Gen", 
-		PrimaryPosition: "Left Back", 
-		CurrentBlueLockRank: 5,
-		Stats: Stats{Overall: 97, Offense: 92, Shooting: 85, Speed: 99, Defense: 98, Passing: 94, Dribbling: 88},
-	},
-}
+// var players = []player {
+// 	{
+// 		ID: 1, 
+// 		Name: "Isagi Yoichi", 
+// 		Age: 17, 
+// 		Height: 175, 
+// 		NELTeam: "Bastard Munchen", 
+// 		PrimaryPosition: "Center Forward", 
+// 		CurrentBlueLockRank: 1,
+// 		Stats: Stats{Overall: 94, Offense: 97.5, Shooting: 90, Speed: 83, Defense: 80, Passing: 83, Dribbling: 77.5},
+// 	},
+// 	{
+// 		ID: 2, 
+// 		Name: "Itoshi Rin", 
+// 		Age: 18, 
+// 		Height: 186, 
+// 		NELTeam: "Paris X Gen", 
+// 		PrimaryPosition: "Left Winger", 
+// 		CurrentBlueLockRank: 2,
+// 		Stats: Stats{Overall: 95, Offense: 96, Shooting: 94, Speed: 88, Defense: 82, Passing: 85, Dribbling: 90},
+// 	},
+// 	{
+// 		ID: 3, 
+// 		Name: "Nagi Seishiro", 
+// 		Age: 17, 
+// 		Height: 190, 
+// 		NELTeam: "Manshine City", 
+// 		PrimaryPosition: "Center Forward", 
+// 		CurrentBlueLockRank: 3,
+// 		Stats: Stats{Overall: 93, Offense: 98, Shooting: 92, Speed: 80, Defense: 75, Passing: 88, Dribbling: 95},
+// 	},
+// 	{
+// 		ID: 4, 
+// 		Name: "Michael Kaiser", 
+// 		Age: 20, 
+// 		Height: 186, 
+// 		NELTeam: "Bastard Munchen", 
+// 		PrimaryPosition: "False Nine", 
+// 		CurrentBlueLockRank: 4,
+// 		Stats: Stats{Overall: 96, Offense: 99, Shooting: 95, Speed: 85, Defense: 78, Passing: 90, Dribbling: 97},
+// 	},
+// 	{
+// 		ID: 5, 
+// 		Name: "Julian Loki", 
+// 		Age: 19, 
+// 		Height: 181, 
+// 		NELTeam: "Paris X Gen", 
+// 		PrimaryPosition: "Left Back", 
+// 		CurrentBlueLockRank: 5,
+// 		Stats: Stats{Overall: 97, Offense: 92, Shooting: 85, Speed: 99, Defense: 98, Passing: 94, Dribbling: 88},
+// 	},
+// }
 
 
 func (a *application) getPlayers(c *gin.Context){
@@ -123,20 +125,33 @@ func (a *application) getPlayers(c *gin.Context){
 }
 
 func (a *application) getPlayerById (c *gin.Context){
-	idStr := c.Param("id")
 
-	// if the conversion fails, it returns an error.
-	id, err := strconv.Atoi(idStr)
+	// GET THE ID FROM THE PARAM
+	id := c.Param("id")
+
+	id, err := strconv.Atoi(id)
 	if err != nil {
-		c.IndentedJSON(http.StatusBadRequest, gin.H{"message" : "invalid id format"})
-		return 
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message" : "invalid id"})
+		return
 	}
 
-	for _, p := range players {
-		if p.ID == id {
-			c.IndentedJSON(http.StatusOK, p)
-			return
-		}
+	var stmt string = `SELECT p.id, p.name, p.age, p.nelTeam, p.primaryPosition, p.currentBlueLockRank,
+						s.overall, s.offense, s.shooting, s.speed, s.defense, s.passing, s.dribbling
+						FROM players p
+						JOIN stats s ON s.playerid = p.id
+					WHERE p.id = ?`
+
+
+	var p player
+	err = a.db.QueryRow(stmt, id).Scan(
+		&p.ID, &p.Name, &p.Age, &p.NELTeam, &p.PrimaryPosition, &p.CurrentBlueLockRank,
+		&p.Stats.Overall, &p.Stats.Offense, &p.Stats.Shooting, &p.Stats.Speed, &p.Stats.Defense, &p.Stats.Passing, &p.Stats.Dribbling
+	)
+	if err == sql.ErrNoRows {
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message" : "player not found"})
+		return
 	}
-	c.IndentedJSON(http.StatusNotFound, gin.H{"message": "player not found"})
+	if err != nil {log.Fatal(err)}
+ 
+	c.IndentedJSON(http.StatusOK, p)
 }
