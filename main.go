@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -110,26 +111,59 @@ func (a *application) getPlayers(c *gin.Context){
 
 	name := c.Query("name")
 
-	if name != "" {
-		for _, p := range players {
-			if p.Name == name {
-				c.IndentedJSON(http.StatusOK, p)
-				return
-			}
-		}
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message" : "player not found"})
-		return
+	if name == ""{
+		var selectAllstmt = `SELECT p.id, p.name, p.age, p.nelTeam, p.primaryPosition, p.currentBlueLockRank,
+       			s.overall, s.offense, s.shooting, s.speed, s.defense, s.passing, s.dribbling
+				FROM players p
+				JOIN stats s ON s.playerid = p.id`
+
+	playerRows, err := a.db.Query(selectAllstmt)
+	if err != nil {log.Fatal(err)}
+	defer playerRows.Close()
+
+	var players []player
+	for playerRows.Next(){
+		var p player
+		err = playerRows.Scan(
+			&p.ID, &p.Name, &p.Age, &p.NELTeam, &p.PrimaryPosition, &p.CurrentBlueLockRank,
+			&p.Stats.Overall, &p.Stats.Offense, &p.Stats.Shooting, &p.Stats.Speed, &p.Stats.Defense, &p.Stats.Passing, &p.Stats.Dribbling,)
+		if err != nil {log.Fatal(err)}
+		players = append(players, p)
 	}
 
 	c.IndentedJSON(http.StatusOK, players)
+
+	} else {
+		var stmt string = `SELECT p.id, p.name, p.age, p.nelTeam, p.primaryPosition, p.currentBlueLockRank,
+							s.overall, s.offense, s.shooting, s.speed, s.defense, s.passing, s.dribbling
+							FROM players p
+							JOIN stats s ON s.playerid = p.id
+						WHERE p.name = ?`
+		var p player
+		err := a.db.QueryRow(stmt, name).Scan(
+			&p.ID, &p.Name, &p.Age, &p.NELTeam, &p.PrimaryPosition, &p.CurrentBlueLockRank,
+			&p.Stats.Overall, &p.Stats.Offense, &p.Stats.Shooting, &p.Stats.Speed, &p.Stats.Defense, &p.Stats.Passing, &p.Stats.Dribbling,
+		)
+		if err == sql.ErrNoRows {
+			c.IndentedJSON(http.StatusNotFound, gin.H{"message" : "player not found"})
+			return
+		}
+		if err != nil {
+			log.Println(err)
+			c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "database error"})
+			return
+		}
+
+		c.IndentedJSON(http.StatusOK, p)
+	}
 }
 
 func (a *application) getPlayerById (c *gin.Context){
 
 	// GET THE ID FROM THE PARAM
-	id := c.Param("id")
+	idStr := c.Param("id")
 
-	id, err := strconv.Atoi(id)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.IndentedJSON(http.StatusBadRequest, gin.H{"message" : "invalid id"})
 		return
@@ -145,13 +179,17 @@ func (a *application) getPlayerById (c *gin.Context){
 	var p player
 	err = a.db.QueryRow(stmt, id).Scan(
 		&p.ID, &p.Name, &p.Age, &p.NELTeam, &p.PrimaryPosition, &p.CurrentBlueLockRank,
-		&p.Stats.Overall, &p.Stats.Offense, &p.Stats.Shooting, &p.Stats.Speed, &p.Stats.Defense, &p.Stats.Passing, &p.Stats.Dribbling
+		&p.Stats.Overall, &p.Stats.Offense, &p.Stats.Shooting, &p.Stats.Speed, &p.Stats.Defense, &p.Stats.Passing, &p.Stats.Dribbling,
 	)
 	if err == sql.ErrNoRows {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message" : "player not found"})
 		return
 	}
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Println(err)
+		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "database error"})
+		return
+	}
  
 	c.IndentedJSON(http.StatusOK, p)
 }

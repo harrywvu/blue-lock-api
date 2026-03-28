@@ -38,17 +38,5 @@ func openDB() (*sql.DB){
 	)`)
 	if err != nil {log.Fatalf("Failed to create table: %v", err)}
 
-	result, err := db.Exec(`
-		INSERT INTO players (name, age, nelTeam, primaryPosition, currentBlueLockRank)
-		VALUES (?, ?, ?,?, ?)`, "Isagi Yoichi", 17, "Bastard Munchen", "Center Forward", 1)
-	
-	if err != nil {log.Fatal(err)}
-	lastId, _ := result.LastInsertId()
-
-	_, err = db.Exec(`
-		INSERT INTO stats (playerid, overall, offense, shooting, speed, defense, passing, dribbling)
-		VALUES (?,?,?,?,?,?,?,?)`, lastId, 94, 97.5, 90, 83, 80, 83, 77.5)
-	if err != nil {log.Fatal(err)}
-
 	return db
 }
