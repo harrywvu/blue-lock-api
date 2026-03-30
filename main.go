@@ -2,8 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -38,6 +36,26 @@ type player struct {
 	Stats               Stats `json:"stats"`
 }
 
+const basePlayerQuery = `SELECT p.id, p.name, p.age, p.nelTeam, p.primaryPosition, p.currentBlueLockRank,
+							s.overall, s.offense, s.shooting, s.speed, s.defense, s.passing, s.dribbling
+							FROM players p
+							JOIN stats s ON s.playerid = p.id`
+
+
+type scanner interface {
+	Scan(dest ...any) error	
+}
+
+func scanPlayer(s scanner) (player, error) {
+	var p player
+
+	err := s.Scan(
+		&p.ID, &p.Name, &p.Age, &p.NELTeam, &p.PrimaryPosition, &p.CurrentBlueLockRank,
+		&p.Stats.Overall, &p.Stats.Offense, &p.Stats.Shooting, &p.Stats.Speed, &p.Stats.Defense, &p.Stats.Passing, &p.Stats.Dribbling,
+	)
+
+	return p, err
+}
 
 func main() {
 
@@ -52,98 +70,25 @@ func main() {
 	router.Run("localhost:8080")
 }
 
-
-// var players = []player {
-// 	{
-// 		ID: 1, 
-// 		Name: "Isagi Yoichi", 
-// 		Age: 17, 
-// 		Height: 175, 
-// 		NELTeam: "Bastard Munchen", 
-// 		PrimaryPosition: "Center Forward", 
-// 		CurrentBlueLockRank: 1,
-// 		Stats: Stats{Overall: 94, Offense: 97.5, Shooting: 90, Speed: 83, Defense: 80, Passing: 83, Dribbling: 77.5},
-// 	},
-// 	{
-// 		ID: 2, 
-// 		Name: "Itoshi Rin", 
-// 		Age: 18, 
-// 		Height: 186, 
-// 		NELTeam: "Paris X Gen", 
-// 		PrimaryPosition: "Left Winger", 
-// 		CurrentBlueLockRank: 2,
-// 		Stats: Stats{Overall: 95, Offense: 96, Shooting: 94, Speed: 88, Defense: 82, Passing: 85, Dribbling: 90},
-// 	},
-// 	{
-// 		ID: 3, 
-// 		Name: "Nagi Seishiro", 
-// 		Age: 17, 
-// 		Height: 190, 
-// 		NELTeam: "Manshine City", 
-// 		PrimaryPosition: "Center Forward", 
-// 		CurrentBlueLockRank: 3,
-// 		Stats: Stats{Overall: 93, Offense: 98, Shooting: 92, Speed: 80, Defense: 75, Passing: 88, Dribbling: 95},
-// 	},
-// 	{
-// 		ID: 4, 
-// 		Name: "Michael Kaiser", 
-// 		Age: 20, 
-// 		Height: 186, 
-// 		NELTeam: "Bastard Munchen", 
-// 		PrimaryPosition: "False Nine", 
-// 		CurrentBlueLockRank: 4,
-// 		Stats: Stats{Overall: 96, Offense: 99, Shooting: 95, Speed: 85, Defense: 78, Passing: 90, Dribbling: 97},
-// 	},
-// 	{
-// 		ID: 5, 
-// 		Name: "Julian Loki", 
-// 		Age: 19, 
-// 		Height: 181, 
-// 		NELTeam: "Paris X Gen", 
-// 		PrimaryPosition: "Left Back", 
-// 		CurrentBlueLockRank: 5,
-// 		Stats: Stats{Overall: 97, Offense: 92, Shooting: 85, Speed: 99, Defense: 98, Passing: 94, Dribbling: 88},
-// 	},
-// }
-
-
 func (a *application) getPlayers(c *gin.Context){
 
 	name := c.Query("name")
 
 	if name == ""{
-		var selectAllstmt = `SELECT p.id, p.name, p.age, p.nelTeam, p.primaryPosition, p.currentBlueLockRank,
-       			s.overall, s.offense, s.shooting, s.speed, s.defense, s.passing, s.dribbling
-				FROM players p
-				JOIN stats s ON s.playerid = p.id`
 
-	playerRows, err := a.db.Query(selectAllstmt)
-	if err != nil {log.Fatal(err)}
-	defer playerRows.Close()
+		players, err := a.getAllPlayers()
 
-	var players []player
-	for playerRows.Next(){
-		var p player
-		err = playerRows.Scan(
-			&p.ID, &p.Name, &p.Age, &p.NELTeam, &p.PrimaryPosition, &p.CurrentBlueLockRank,
-			&p.Stats.Overall, &p.Stats.Offense, &p.Stats.Shooting, &p.Stats.Speed, &p.Stats.Defense, &p.Stats.Passing, &p.Stats.Dribbling,)
-		if err != nil {log.Fatal(err)}
-		players = append(players, p)
-	}
+		if err != nil {
+			c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "database error"})
+			return
+		}
 
-	c.IndentedJSON(http.StatusOK, players)
+		c.IndentedJSON(http.StatusOK, players)
 
 	} else {
-		var stmt string = `SELECT p.id, p.name, p.age, p.nelTeam, p.primaryPosition, p.currentBlueLockRank,
-							s.overall, s.offense, s.shooting, s.speed, s.defense, s.passing, s.dribbling
-							FROM players p
-							JOIN stats s ON s.playerid = p.id
-						WHERE p.name = ?`
-		var p player
-		err := a.db.QueryRow(stmt, name).Scan(
-			&p.ID, &p.Name, &p.Age, &p.NELTeam, &p.PrimaryPosition, &p.CurrentBlueLockRank,
-			&p.Stats.Overall, &p.Stats.Offense, &p.Stats.Shooting, &p.Stats.Speed, &p.Stats.Defense, &p.Stats.Passing, &p.Stats.Dribbling,
-		)
+		
+		p, err := a.getPlayerByName(name)
+
 		if err == sql.ErrNoRows {
 			c.IndentedJSON(http.StatusNotFound, gin.H{"message" : "player not found"})
 			return
@@ -158,38 +103,73 @@ func (a *application) getPlayers(c *gin.Context){
 	}
 }
 
+// HANDLERS
 func (a *application) getPlayerById (c *gin.Context){
 
 	// GET THE ID FROM THE PARAM
 	idStr := c.Param("id")
 
 	id, err := strconv.Atoi(idStr)
+
 	if err != nil {
 		c.IndentedJSON(http.StatusBadRequest, gin.H{"message" : "invalid id"})
 		return
 	}
 
-	var stmt string = `SELECT p.id, p.name, p.age, p.nelTeam, p.primaryPosition, p.currentBlueLockRank,
-						s.overall, s.offense, s.shooting, s.speed, s.defense, s.passing, s.dribbling
-						FROM players p
-						JOIN stats s ON s.playerid = p.id
-					WHERE p.id = ?`
+	p, err := a.getPlayerByID(id)
 
-
-	var p player
-	err = a.db.QueryRow(stmt, id).Scan(
-		&p.ID, &p.Name, &p.Age, &p.NELTeam, &p.PrimaryPosition, &p.CurrentBlueLockRank,
-		&p.Stats.Overall, &p.Stats.Offense, &p.Stats.Shooting, &p.Stats.Speed, &p.Stats.Defense, &p.Stats.Passing, &p.Stats.Dribbling,
-	)
 	if err == sql.ErrNoRows {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message" : "player not found"})
 		return
 	}
+
 	if err != nil {
 		log.Println(err)
 		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "database error"})
 		return
 	}
- 
+
 	c.IndentedJSON(http.StatusOK, p)
+}
+
+func (a *application) getPlayerByID (id int) (player, error) {
+	stmt := basePlayerQuery + " WHERE p.id = ?"
+	
+	p, err := scanPlayer(a.db.QueryRow(stmt, id))
+
+	return p, err
+}
+
+func (a *application) getPlayerByName(name string) (player, error) {
+	stmt := basePlayerQuery + " WHERE p.name = ?"
+
+	p, err := scanPlayer(a.db.QueryRow(stmt, name))
+
+	return p, err
+}
+
+func (a *application) getAllPlayers() ([]player, error){
+	var selectAllstmt = basePlayerQuery
+
+	playerRows, err := a.db.Query(selectAllstmt)
+		
+	if err != nil {return nil, err}
+		
+	defer playerRows.Close()
+
+	var players []player // store all the rows
+
+	for playerRows.Next(){			
+		p, err := scanPlayer(playerRows)
+			
+		if err != nil {return nil, err}
+
+		players = append(players, p)
+	}
+
+	if err := playerRows.Err(); err != nil {
+		return nil, err
+	}
+
+	return players, nil
 }
